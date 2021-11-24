@@ -2,6 +2,7 @@ from typing import Container
 import pythoncom
 from win32com.client import Dispatch, gencache
 import os
+import time
 
 def get_kompas_api7():
     module = gencache.EnsureModule("{69AC2981-37C0-4379-84FD-5DD2F3C0A520}", 0, 1, 0)
@@ -148,3 +149,5 @@ try:
 except Exception as e:
     print(e)
     # app7.Quit()
+print('Конец программы...')
+time.sleep(60)
