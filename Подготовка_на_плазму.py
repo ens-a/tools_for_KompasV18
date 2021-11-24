@@ -18,8 +18,8 @@ def get_kompas_api5():
 
 def copy_to_new_view():
     global doc, doc_app5
-    # Всегда обращаемся к виду с номером 1 
-    view = doc.ViewsAndLayersManager.Views.ViewByNumber(1)
+    # Всегда обращаемся к активному виду 
+    view = doc.ViewsAndLayersManager.Views.ActiveView
     # Инициализируем контейнер со всеми объектами вида
     container = module7.IDrawingContainer(view)
     # Для удаления объектов
@@ -102,34 +102,41 @@ try:
     # print('Укажите путь к файлу спецификации')
     # spec_path = input()
 
-    print('Укажите путь к чертежам')
+    print('Укажите путь к чертежам:')
     docs_path = input()
 
     # spec_path = r'C:\Users\UserPC\Documents\Macro Kompas\Спецификация.spw'
     # print(spec_path)
     # spec_doc = app7.Documents.Open(spec_path, True, False)
-    spec_doc = app7.ActiveDocument
 
+    spec_doc = app7.ActiveDocument
+    # Если активный документ не Спецификация
+    if spec_doc.DocumentType != 3:
+        print("ERROR: Спецификация не открыта в Компасе")
     print('Запуск создания чертежей...')
     details = get_details_from_spec(spec_doc)
 
     # docs_path = r'C:\Users\UserPC\Documents\Macro Kompas\Конструкторские'
 
-    if not os.path.exists(docs_path + '\\DXF'):
-        os.mkdir(docs_path + '\\DXF')
+    new_folder_name = 'DXF {}'.format(spec_doc.Name.strip('.spw'))
+   
+    if not os.path.exists(docs_path + '\\{}'.format(new_folder_name)):
+        os.mkdir(docs_path + '\\{}'.format(new_folder_name))
 
     for detail_name, (quantity, thickness) in details.items():
 
         path = docs_path + '\\' + detail_name + '.cdw'
-        print(path)
-        iKompasDocument = app7.Documents.Open(path, True, False)
-        doc = module7.IKompasDocument2D(iKompasDocument)
-        # Захватываем активный чертеж приложением api5
-        doc_app5 = app5.ActiveDocument2D
-
+        try:
+            iKompasDocument = app7.Documents.Open(path, True, False)
+            doc = module7.IKompasDocument2D(iKompasDocument)
+            # Захватываем активный чертеж приложением api5
+            doc_app5 = app5.ActiveDocument2D
+        except:
+            print(f'ERROR: Чертеж {detail_name} не был найден.')
         copy_to_new_view()
 
-        new_path = docs_path + '\\DXF\\{} {}шт {}мм.cdw'.format(detail_name, quantity, thickness)
+        new_path = docs_path + '\\{}\\{} {}шт {}мм.cdw'.format(new_folder_name, detail_name, quantity, thickness)
+
         flag = doc_app5.ksSaveDocumentEx(new_path, -1)
         if flag:
             print('INFO: Чертеж для детали {} успешно сохранен'.format(detail_name))
