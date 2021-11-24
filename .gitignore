@@ -1,7 +1,8 @@
-.m3d
-.bak
-.a3d
-.spw
-.cdm
-.zip
+*.m3d
+*.bak
+*.a3d
+*.spw
+*.cdm
+*.zip
+*.a3m
 Конструкторские
