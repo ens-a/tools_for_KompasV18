@@ -1,20 +1,17 @@
-from typing import Container
-from numpy import printoptions
 from win32com.client import Dispatch, gencache
-import os
-import pythoncom
+import time
 import re
 from decimal import Decimal
 from pythoncom import VT_EMPTY
 from win32com.client import VARIANT
 
-def get_kompas_api7():
-    module = gencache.EnsureModule("{69AC2981-37C0-4379-84FD-5DD2F3C0A520}", 0, 1, 0)
-    api = module.IKompasAPIObject(
-        Dispatch("Kompas.Application.7")._oleobj_.QueryInterface(module.IKompasAPIObject.CLSID,
-                                                                 pythoncom.IID_IDispatch))
-    const = gencache.EnsureModule("{75C9F5D0-B5B8-4526-8681-9903C567D2ED}", 0, 1, 0).constants
-    return module, api, const
+def get_kompas_api():
+    API7 = gencache.EnsureModule('{69AC2981-37C0-4379-84FD-5DD2F3C0A520}', 0, 1, 0)
+    API5 = gencache.EnsureModule('{0422828C-F174-495E-AC5D-D31014DBBE87}', 0, 1, 0)
+
+    KompasObject = Dispatch('Kompas.Application.5', None, API5.KompasObject.CLSID)
+    iApplication = KompasObject.ksGetApplication7()	
+    return API7, API5, iApplication
 
 def get_base_objects(part):
     """Функция возвращает список объектов деталей и список объектов подсборок"""
@@ -54,6 +51,7 @@ def change_marking(item, marking):
     # Меняем обозначение, перестраиваем и закрываем
     iPart7doc.Marking = marking
     iPart7doc.Update()
+    iDoc.Save()
     iDoc.Close(1)
 
     # Свойства объекта в сборке
@@ -66,16 +64,13 @@ def change_marking(item, marking):
     item.Update()
 
 try:
-    module7, api7, const7 = get_kompas_api7()
-    app7 = api7.Application
-    #app7.Visible = True
-    app7.HideMessage = const7.ksHideMessageNo
-
-    API7 = gencache.EnsureModule('{69AC2981-37C0-4379-84FD-5DD2F3C0A520}', 0, 1, 0)
+    API7, API5, app7 = get_kompas_api()
+    # Автоматически перестраиваем все документы
+    app7.HideMessage = 1
     iPropertyMng = API7.IPropertyMng(app7)
 
     _doc = app7.ActiveDocument
-    doc = module7.IKompasDocument3D(_doc)
+    doc = API7.IKompasDocument3D(_doc)
     # Получаем объект сборки
     model = doc.TopPart
 
@@ -129,9 +124,13 @@ try:
     model.Update()
     # Перестраиваем активную сборку 
     doc.RebuildDocument()
+    _doc.Save()
+    app7.HideMessage = 0
     #app7.Quit()
 except Exception as e:
     print(e)
+    app7.HideMessage = 0
     #app7.Quit()
 
-
+print('Конец программы...')
+time.sleep(60)

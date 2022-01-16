@@ -4,31 +4,42 @@ from win32com.client import Dispatch, gencache
 import os
 import time
 
-def get_kompas_api7():
-    module = gencache.EnsureModule("{69AC2981-37C0-4379-84FD-5DD2F3C0A520}", 0, 1, 0)
-    api = module.IKompasAPIObject(
-        Dispatch("Kompas.Application.7")._oleobj_.QueryInterface(module.IKompasAPIObject.CLSID,
-                                                                 pythoncom.IID_IDispatch))
+def get_kompas_api():
+    API7 = gencache.EnsureModule('{69AC2981-37C0-4379-84FD-5DD2F3C0A520}', 0, 1, 0)
+    API5 = gencache.EnsureModule('{0422828C-F174-495E-AC5D-D31014DBBE87}', 0, 1, 0)
+
+    KompasObject = Dispatch('Kompas.Application.5', None, API5.KompasObject.CLSID)
+    app7 = Dispatch('Kompas.Application.7')
+
     const = gencache.EnsureModule("{75C9F5D0-B5B8-4526-8681-9903C567D2ED}", 0, 1, 0).constants
-    return module, api, const
 
-def get_kompas_api5():
-    module = gencache.EnsureModule('{0422828C-F174-495E-AC5D-D31014DBBE87}', 0, 1, 0)
-    api = Dispatch('Kompas.Application.5')
-    return module, api
+    # API5 = gencache.EnsureModule("{0422828C-F174-495E-AC5D-D31014DBBE87}", 0, 1, 0)
+    # app5 = API5.KompasObject(Dispatch("Kompas.Application.5")._oleobj_.QueryInterface(API5.KompasObject.CLSID, pythoncom.IID_IDispatch))
 
-def copy_to_new_view():
-    global doc, doc_app5
+    # API7 = gencache.EnsureModule("{69AC2981-37C0-4379-84FD-5DD2F3C0A520}", 0, 1, 0)
+    # app7 = API7.IApplication(Dispatch("Kompas.Application.7")._oleobj_.QueryInterface(API7.IApplication.CLSID, pythoncom.IID_IDispatch))
+
+    return API7, API5, app7, KompasObject, const
+
+def copy_to_new_view(doc, doc_app5):
+    global API7
     # Всегда обращаемся к активному виду 
     view = doc.ViewsAndLayersManager.Views.ActiveView
     # Инициализируем контейнер со всеми объектами вида
-    container = module7.IDrawingContainer(view)
+    container = API7.IDrawingContainer(view)
     # Для удаления объектов
     # iKompasDocument1.Delete(line_dims)
     # Проходимся по контейнеру и отбираем только объкты-линии
     obj_to_copy = []
     for obj in container.Objects(0):
-        if obj.DrawingObjectType in [1, 2, 3, 8, 31, 32, 33, 34]:
+
+        # Тип объекта на чертеже не всегда геометрический (ILeader)
+        try:
+            obj_type = obj.DrawingObjectType
+        except:
+            obj_type = 0
+
+        if obj_type in [1, 2, 3, 8, 31, 32, 33, 34, 35]:
             if obj.Style == 1:
                 # Берем не сам объект, а его reference (long)
                 obj_to_copy.append(obj.Reference)
@@ -62,7 +73,8 @@ def copy_to_new_view():
     while views.Item(i):
         doc_app5.ksDestroyObjects(views.Item(i).Reference)
         i += 1
-    
+    # Если никакие объекты не были скопированы, мы об этом сообщим
+    return True if len(obj_to_copy) else False
 
 def get_details_from_spec(doc):
     """Функция итерируется по спецификации и собирает для листовых деталей словарь,
@@ -93,12 +105,10 @@ def get_details_from_spec(doc):
 
 try:
     print('Запуск программы...')
-    module7, api7, const7 = get_kompas_api7()
-    app7 = api7.Application
-    #app7.Visible = True
-    app7.HideMessage = const7.ksHideMessageNo
 
-    module5, app5 = get_kompas_api5()
+    API7, API5, app7, app5, const7 = get_kompas_api()
+    # Автоматически перестраиваем все документы
+    app7.HideMessage = 1
 
     # print('Укажите путь к файлу спецификации')
     # spec_path = input()
@@ -120,7 +130,7 @@ try:
     # docs_path = r'C:\Users\UserPC\Documents\Macro Kompas\Конструкторские'
 
     new_folder_name = 'DXF {}'.format(spec_doc.Name.strip('.spw'))
-   
+
     if not os.path.exists(docs_path + '\\{}'.format(new_folder_name)):
         os.mkdir(docs_path + '\\{}'.format(new_folder_name))
 
@@ -129,14 +139,24 @@ try:
         path = docs_path + '\\' + detail_name + '.cdw'
         try:
             iKompasDocument = app7.Documents.Open(path, True, False)
-            doc = module7.IKompasDocument2D(iKompasDocument)
+            doc = API7.IKompasDocument2D(iKompasDocument)
+            doc2d = API7.IKompasDocument2D1(iKompasDocument)
             # Захватываем активный чертеж приложением api5
-            doc_app5 = app5.ActiveDocument2D
+            doc_app5 = app5.ActiveDocument2D()
         except:
             print(f'ERROR: Чертеж {detail_name} не был найден.')
-        copy_to_new_view()
+        
+        try:
+            copy_done = copy_to_new_view(doc, doc_app5)
+
+            if not copy_done:
+                print('ERROR: Не были скопированы объекты для чертежа {}'.format(detail_name))
+        except Exception as e:
+            print('ERROR: Ошибка при создании вида для детали {}'.format(detail_name))
 
         new_path = docs_path + '\\{}\\{} {}шт {}мм.cdw'.format(new_folder_name, detail_name, quantity, thickness)
+
+        doc2d.RebuildDocument()
 
         flag = doc_app5.ksSaveDocumentEx(new_path, -1)
         if flag:
@@ -145,9 +165,11 @@ try:
             print('ERROR: Ошибка при сохранении чертежа для детали {}'.format(detail_name))
         doc_app5.ksCloseDocument()
         doc.Close(0)
+    app7.HideMessage = 0
     # app7.Quit()
 except Exception as e:
     print(e)
+    app7.HideMessage = 0
     # app7.Quit()
 print('Конец программы...')
 time.sleep(60)
