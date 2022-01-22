@@ -10,8 +10,11 @@ def get_kompas_api():
     API5 = gencache.EnsureModule('{0422828C-F174-495E-AC5D-D31014DBBE87}', 0, 1, 0)
 
     KompasObject = Dispatch('Kompas.Application.5', None, API5.KompasObject.CLSID)
-    iApplication = KompasObject.ksGetApplication7()	
-    return API7, API5, iApplication
+    app7 = Dispatch('Kompas.Application.7')
+
+    const = gencache.EnsureModule("{75C9F5D0-B5B8-4526-8681-9903C567D2ED}", 0, 1, 0).constants
+    
+    return API7, API5, app7, KompasObject, const
 
 def get_base_objects(part):
     """Функция возвращает список объектов деталей и список объектов подсборок"""
@@ -64,7 +67,7 @@ def change_marking(item, marking):
     item.Update()
 
 try:
-    API7, API5, app7 = get_kompas_api()
+    API7, API5, app7, _, _ = get_kompas_api()
     # Автоматически перестраиваем все документы
     app7.HideMessage = 1
     iPropertyMng = API7.IPropertyMng(app7)
@@ -86,7 +89,7 @@ try:
         assembly_marking = match[0]
         assembly_marking = assembly_marking.strip('v/-')
     else:
-        print('Цифровая часть в маркировке не расспознана. Введите кодировку для подсборок:')
+        print('INFO: Цифровая часть в маркировке не расспознана. Введите кодировку для подсборок:')
         assembly_marking = str(input())
         assembly_marking = assembly_marking.strip('v/-')
     # Если ввели все равно енверно, то выдаем ошибку
@@ -96,7 +99,7 @@ try:
         assembly_cnt = Decimal(assembly_marking)
         detail_cnt = Decimal("0")
     else:
-        print('Кодировка не найдена в маркировке.')
+        print('ERROR: Кодировка не найдена в маркировке.')
 
     parts, assemblies = get_base_objects(model)
     for assembly in assemblies:

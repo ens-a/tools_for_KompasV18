@@ -1,3 +1,5 @@
+from ast import NamedExpr
+from collections import namedtuple
 from typing import Container
 import pythoncom
 from win32com.client import Dispatch, gencache
@@ -13,36 +15,32 @@ def get_kompas_api():
 
     const = gencache.EnsureModule("{75C9F5D0-B5B8-4526-8681-9903C567D2ED}", 0, 1, 0).constants
 
-    # API5 = gencache.EnsureModule("{0422828C-F174-495E-AC5D-D31014DBBE87}", 0, 1, 0)
-    # app5 = API5.KompasObject(Dispatch("Kompas.Application.5")._oleobj_.QueryInterface(API5.KompasObject.CLSID, pythoncom.IID_IDispatch))
-
-    # API7 = gencache.EnsureModule("{69AC2981-37C0-4379-84FD-5DD2F3C0A520}", 0, 1, 0)
-    # app7 = API7.IApplication(Dispatch("Kompas.Application.7")._oleobj_.QueryInterface(API7.IApplication.CLSID, pythoncom.IID_IDispatch))
-
     return API7, API5, app7, KompasObject, const
 
-def copy_to_new_view(doc, doc_app5):
+def get_objects_to_copy(doc):
     global API7
     # Всегда обращаемся к активному виду 
     view = doc.ViewsAndLayersManager.Views.ActiveView
     # Инициализируем контейнер со всеми объектами вида
     container = API7.IDrawingContainer(view)
-    # Для удаления объектов
-    # iKompasDocument1.Delete(line_dims)
     # Проходимся по контейнеру и отбираем только объкты-линии
     obj_to_copy = []
     for obj in container.Objects(0):
-
-        # Тип объекта на чертеже не всегда геометрический (ILeader)
+        # Тип объекта на чертеже не всегда геометрический (напр ILeader)
         try:
             obj_type = obj.DrawingObjectType
         except:
             obj_type = 0
 
         if obj_type in [1, 2, 3, 8, 31, 32, 33, 34, 35]:
+            # Если линия обычная
             if obj.Style == 1:
                 # Берем не сам объект, а его reference (long)
                 obj_to_copy.append(obj.Reference)
+    return obj_to_copy
+
+def copy_to_new_view(doc, doc_app5, obj_to_copy):
+    global API7
 
     # Добавляем новый вид за пределами чертежа
     new_view = doc.ViewsAndLayersManager.Views.Add(1)
@@ -50,31 +48,24 @@ def copy_to_new_view(doc, doc_app5):
     new_view.Y = 0
     new_view.Update()
 
-    #kompas6_constants = gencache.EnsureModule("{75C9F5D0-B5B8-4526-8681-9903C567D2ED}", 0, 1, 0).constants
-    #  Создаем новый документ
-    #kompas_document = Documents.AddWithDefaultSettings(kompas6_constants.ksDocumentFragment, True)
-
-    #kompas_document_2d = API7.IKompasDocument2D(kompas_document)
-    #iDocument2D = kompas_object.ActiveDocument2D
-
     # Создаем новую группу объектов и складываем туда все объекты для копирования
     g = doc_app5.ksNewGroup(1)
     for x in obj_to_copy:
         doc_app5.ksAddObjGroup(g, x)
     # Копируем группу в буфер обмена
-    doc_app5.ksWriteGroupToClip(g,1)
+    doc_app5.ksWriteGroupToClip(g, 1)
     # Считываем группу из буфера и записываем в вид
     g_ = doc_app5.ksReadGroupFromClip()
     doc_app5.ksStoreTmpGroup(g_)
 
+def destroy_views(doc, doc_app5):
     # Разрушаем все виды, кроме системного
     i = 1
     views =  doc.ViewsAndLayersManager.Views
+    # view - это массив и мы итерируемся по нему через метод Items и пердаем индекс из массива
     while views.Item(i):
         doc_app5.ksDestroyObjects(views.Item(i).Reference)
         i += 1
-    # Если никакие объекты не были скопированы, мы об этом сообщим
-    return True if len(obj_to_copy) else False
 
 def get_details_from_spec(doc):
     """Функция итерируется по спецификации и собирает для листовых деталей словарь,
@@ -110,66 +101,62 @@ try:
     # Автоматически перестраиваем все документы
     app7.HideMessage = 1
 
-    # print('Укажите путь к файлу спецификации')
-    # spec_path = input()
-
-    print('Укажите путь к чертежам:')
-    docs_path = input()
-
-    # spec_path = r'C:\Users\UserPC\Documents\Macro Kompas\Спецификация.spw'
-    # print(spec_path)
-    # spec_doc = app7.Documents.Open(spec_path, True, False)
-
     spec_doc = app7.ActiveDocument
     # Если активный документ не Спецификация
     if spec_doc.DocumentType != 3:
-        print("ERROR: Спецификация не открыта в Компасе")
-    print('Запуск создания чертежей...')
-    details = get_details_from_spec(spec_doc)
+        raise NameError("ERROR: Спецификация не открыта в Компасе")
+    
+    print('Укажите путь к чертежам:')
+    docs_path = input()
 
-    # docs_path = r'C:\Users\UserPC\Documents\Macro Kompas\Конструкторские'
+    print('Запуск создания чертежей...')
 
     new_folder_name = 'DXF {}'.format(spec_doc.Name.strip('.spw'))
-
+    # Если папка под DXF не создана, то создаем 
     if not os.path.exists(docs_path + '\\{}'.format(new_folder_name)):
         os.mkdir(docs_path + '\\{}'.format(new_folder_name))
 
-    for detail_name, (quantity, thickness) in details.items():
+    try:
+        details = get_details_from_spec(spec_doc)
+    except:
+        raise NameError("EROOR: Не распознаны листовые тела в спецификации")
 
-        path = docs_path + '\\' + detail_name + '.cdw'
+    for detail_name, (quantity, thickness) in details.items():
+        
         try:
+            path = docs_path + '\\' + detail_name + '.cdw'
             iKompasDocument = app7.Documents.Open(path, True, False)
             doc = API7.IKompasDocument2D(iKompasDocument)
             doc2d = API7.IKompasDocument2D1(iKompasDocument)
             # Захватываем активный чертеж приложением api5
             doc_app5 = app5.ActiveDocument2D()
         except:
-            print(f'ERROR: Чертеж {detail_name} не был найден.')
+            raise NameError(f'ERROR: Чертеж {detail_name} не был найден.')
         
         try:
-            copy_done = copy_to_new_view(doc, doc_app5)
+            obj_to_copy = get_objects_to_copy(doc)
+            copy_to_new_view(doc, doc_app5, obj_to_copy)
+            destroy_views(doc, doc_app5)
 
-            if not copy_done:
-                print('ERROR: Не были скопированы объекты для чертежа {}'.format(detail_name))
+            if not obj_to_copy:
+                raise NameError('ERROR: Не были скопированы объекты для чертежа {}'.format(detail_name))
         except Exception as e:
-            print('ERROR: Ошибка при создании вида для детали {}'.format(detail_name))
-
-        new_path = docs_path + '\\{}\\{} {}шт {}мм.cdw'.format(new_folder_name, detail_name, quantity, thickness)
+            raise NameError('ERROR: Ошибка при создании вида для детали {}'.format(detail_name))
 
         doc2d.RebuildDocument()
 
+        new_path = docs_path + '\\{}\\{} {}шт {}мм.cdw'.format(new_folder_name, detail_name, quantity, thickness)
         flag = doc_app5.ksSaveDocumentEx(new_path, -1)
         if flag:
             print('INFO: Чертеж для детали {} успешно сохранен'.format(detail_name))
         else:
-            print('ERROR: Ошибка при сохранении чертежа для детали {}'.format(detail_name))
+            raise NameError('ERROR: Ошибка при сохранении чертежа для детали {}'.format(detail_name))
         doc_app5.ksCloseDocument()
         doc.Close(0)
     app7.HideMessage = 0
-    # app7.Quit()
 except Exception as e:
     print(e)
     app7.HideMessage = 0
-    # app7.Quit()
+
 print('Конец программы...')
 time.sleep(60)
