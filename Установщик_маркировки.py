@@ -131,7 +131,7 @@ try:
     app7.HideMessage = 0
     #app7.Quit()
 except Exception as e:
-    print(e)
+    print(f'ERROR: {e}')
     app7.HideMessage = 0
     #app7.Quit()
 

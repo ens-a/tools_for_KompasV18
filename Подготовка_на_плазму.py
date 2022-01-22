@@ -155,7 +155,7 @@ try:
         doc.Close(0)
     app7.HideMessage = 0
 except Exception as e:
-    print(e)
+    print(f'ERROR: {e}')
     app7.HideMessage = 0
 
 print('Конец программы...')
