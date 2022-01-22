@@ -67,7 +67,7 @@ try:
     module7, _, api7, _, _ = get_kompas_api()
     app7 = api7.Application
     app7.HideMessage = 1
-
+    app7.Visible = True
     #doc = app7.ActiveDocument
     print('Укажите расположение спецификаций:')
     docs_path = input()
