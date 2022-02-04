@@ -102,26 +102,33 @@ try:
         print('ERROR: Кодировка не найдена в маркировке.')
 
     parts, assemblies = get_base_objects(model)
-    for assembly in assemblies:
-        assembly_cnt += Decimal("0.01")
-        marking = str(float(assembly_cnt)).join(rest_marking)
-        # Устанавливаем обозначение
-        try:
-            change_marking(assembly, marking)
-            print(f'INFO: Установлено обозначение {marking} для сборки {assembly.Name}')
-        except:
-            print(f'ERROR: Не удалось установить обозначение {marking} для сборки {assembly.Name}')
+    
+    # for assembly in assemblies:
+    #     assembly_cnt += Decimal("0.01")
+    #     marking = str(float(assembly_cnt)).join(rest_marking)
+    #     # Устанавливаем обозначение
+    #     try:
+    #         change_marking(assembly, marking)
+    #         print(f'INFO: Установлено обозначение {marking} для сборки {assembly.Name}')
+    #     except:
+    #         print(f'ERROR: Не удалось установить обозначение {marking} для сборки {assembly.Name}')
         
     for part in parts:
         detail_cnt += Decimal("0.01")
         marking = top_marking + str(detail_cnt)[1:]
+        counter_info = 0
+        counter_error = 0
         # Устанавливаем обозначение
         try:
             change_marking(part, marking)
+            counter_info += 1
             print(f'INFO: Установлено обозначение {marking} для детали {part.Name}')
         except:
+            counter_error += 1
             print(f'ERROR: Не удалось установить обозначение {marking} для детали {part.Name}')
     
+    print(f'INFO: Обозначение было установленно для {counter_info} деталей')
+
     # Меняем обозначение у самой сборки
     model.Marking = top_marking
     model.Update()
