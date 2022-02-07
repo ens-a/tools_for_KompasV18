@@ -112,12 +112,12 @@ try:
     #         print(f'INFO: Установлено обозначение {marking} для сборки {assembly.Name}')
     #     except:
     #         print(f'ERROR: Не удалось установить обозначение {marking} для сборки {assembly.Name}')
-        
+    
+    counter_info = 0
+    counter_error = 0
     for part in parts:
         detail_cnt += Decimal("0.01")
         marking = top_marking + str(detail_cnt)[1:]
-        counter_info = 0
-        counter_error = 0
         # Устанавливаем обозначение
         try:
             change_marking(part, marking)
@@ -127,7 +127,7 @@ try:
             counter_error += 1
             print(f'ERROR: Не удалось установить обозначение {marking} для детали {part.Name}')
     
-    print(f'INFO: Обозначение было установленно для {counter_info} деталей')
+    print(f'INFO: Обозначение было установленно для {counter_info} деталей {counter_error}')
 
     # Меняем обозначение у самой сборки
     model.Marking = top_marking
